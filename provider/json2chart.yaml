@@ -1,0 +1,17 @@
+identity:
+  author: lfenghx
+  name: json2chart
+  label:
+    en_US: json2chart
+    zh_Hans: json2chart
+    pt_BR: json2chart
+  description:
+    en_US: 一个把JSON转成图表的插件
+    zh_Hans: 一个把JSON转成图表的插件
+    pt_BR: 一个把JSON转成图表的插件
+  icon: json2chart.svg
+tools:
+  - tools/json2chart.yaml
+extra:
+  python:
+    source: provider/json2chart.py

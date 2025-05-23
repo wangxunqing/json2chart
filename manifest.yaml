@@ -1,0 +1,51 @@
+version: 0.0.1
+type: plugin
+author: lfenghx
+name: json2chart
+label:
+  en_US: json2chart
+  ja_JP: json2chart
+  zh_Hans: json2chart
+  pt_BR: json2chart
+description:
+  en_US: 一个把JSON转成图表的插件
+  ja_JP: 一个把JSON转成图表的插件
+  zh_Hans: 一个把JSON转成图表的插件
+  pt_BR: 一个把JSON转成图表的插件
+icon: json2chart.svg
+resource:
+  memory: 268435456
+  permission:
+    tool:
+      enabled: true
+    model:
+      enabled: true
+      llm: true
+      text_embedding: false
+      rerank: false
+      tts: false
+      speech2text: false
+      moderation: false
+    endpoint:
+      enabled: true
+    app:
+      enabled: true
+    storage:
+      enabled: true
+      size: 1048576
+plugins:
+  tools:
+    - provider/json2chart.yaml
+meta:
+  version: 0.0.1
+  arch:
+    - amd64
+    - arm64
+  runner:
+    language: python
+    version: "3.12"
+    entrypoint: main
+  minimum_dify_version: null
+created_at: 2025-05-23T13:18:24.3370013+08:00
+privacy: PRIVACY.md
+verified: false

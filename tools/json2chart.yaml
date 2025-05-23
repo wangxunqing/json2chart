@@ -1,0 +1,50 @@
+identity:
+  name: json2chart
+  author: lfenghx
+  label:
+    en_US: json2chart
+    zh_Hans: json2chart
+    pt_BR: json2chart
+description:
+  human:
+    en_US: 一个把JSON转成图表的插件
+    zh_Hans: 一个把JSON转成图表的插件
+    pt_BR: 一个把JSON转成图表的插件
+  llm: 一个把JSON转成图表的插件
+parameters:
+  - name: chart_data
+    type: string
+    required: true
+    label:
+      en_US: chart data
+      zh_Hans: 图表数据
+    human_description:
+      en_US: Please input the chart data
+      zh_Hans: 请输入图表数据[标准json格式]
+    llm_description: 一个把JSON转成图表的插件
+    form: llm
+  - name: chart_title
+    type: string
+    required: true
+    label:
+      en_US: chart_title
+      zh_Hans: 图表标题
+    human_description:
+      en_US: Please input the chart title
+      zh_Hans: 请输入图表标题
+    llm_description: 一个把JSON转成图表的插件
+    form: llm
+  - name: chart_type
+    type: string
+    required: true
+    label:
+      en_US: chart_type
+      zh_Hans: 图表类型
+    human_description:
+      en_US: Please input the chart title
+      zh_Hans: 请输入图表类型，目前支持柱状图，饼状图，折线图
+    llm_description: 一个把JSON转成图表的插件
+    form: llm
+extra:
+  python:
+    source: tools/json2chart.py
