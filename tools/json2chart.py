@@ -405,6 +405,8 @@ class Json2chartTool(Tool):
         chart_title = tool_parameters.get("chart_title", "图表")
         value_keys = tool_parameters.get("value_keys", None)
         series_names = tool_parameters.get("series_names", None)
+        name_key = tool_parameters.get("name_key", None)
+        
         try:
             data_list = json.loads(chart_data)
             # 解析 value_keys
@@ -415,11 +417,11 @@ class Json2chartTool(Tool):
                 series_names = json.loads(series_names.replace("'", "\""))
 
             if chart_type == "饼状图":
-                echarts_config = generate_echarts_pie(data_list, title=chart_title, value_keys=value_keys, series_names=series_names)
+                echarts_config = generate_echarts_pie(data_list, name_key=name_key, title=chart_title, value_keys=value_keys, series_names=series_names)
             elif chart_type == "柱状图":
-                echarts_config = generate_echarts_bar(data_list, title=chart_title, value_keys=value_keys, series_names=series_names)
+                echarts_config = generate_echarts_bar(data_list, name_key=name_key, title=chart_title, value_keys=value_keys, series_names=series_names)
             elif chart_type == "折线图":
-                echarts_config = generate_echarts_line(data_list, title=chart_title, value_keys=value_keys, series_names=series_names)
+                echarts_config = generate_echarts_line(data_list, name_key=name_key, title=chart_title, value_keys=value_keys, series_names=series_names)
             else:
                 raise ValueError(f"不支持的图表类型: {chart_type}")
 

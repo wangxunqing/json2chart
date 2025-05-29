@@ -45,15 +45,26 @@ parameters:
       zh_Hans: 请输入图表类型，目前支持柱状图，饼状图，折线图
     llm_description: 一个把JSON转成图表的插件
     form: llm
+  - name: name_key
+    type: string
+    required: true
+    label:
+      en_US: name_key
+      zh_Hans: 横坐标对应的key
+    human_description:
+      en_US: Please input the chart title
+      zh_Hans: 请输入横坐标对应的key，字符串格式
+    llm_description: 一个把JSON转成图表的插件
+    form: llm
   - name: value_keys
     type: string
     required: true
     label:
       en_US: value_keys
-      zh_Hans: 图表值对应的key
+      zh_Hans: 纵坐标对应的key
     human_description:
       en_US: Please input the chart title
-      zh_Hans: 请输入图表值对应的key，用数组形式输入，例如["value1","value2"]
+      zh_Hans: 请输入纵坐标对应的key，用数组形式输入，例如["value1","value2"]
     llm_description: 一个把JSON转成图表的插件
     form: llm
   - name: series_names
