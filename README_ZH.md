@@ -40,6 +40,7 @@ json2chart 是一个智能的 JSON 数据可视化工具，能够将 JSON 格式
 ### 技术特点
 
 - 基于 ECharts 生成交互式图表配置
+- **ECharts 样式参考 hm-app-analysis 项目**：色板、标题/图例/坐标轴/提示框等与 `hm-app-analysis/src/plugin/echarts/theme.json` 保持一致，便于与现有业务前端统一视觉
 - 集成大模型分析能力，提升图表生成的智能性
 - 使用 pandas 进行数据处理和分析
 - 采用模块化设计，各图表类型独立实现，便于扩展

@@ -1,4 +1,5 @@
-from utils.chart import generate_colors, auto_detect_keys
+from utils.chart import get_colors, auto_detect_keys
+from utils.theme import get_theme_global, FUNNEL_ITEM_STYLE
 import json
 
 def generate_echarts_funnel(
@@ -39,31 +40,23 @@ def generate_echarts_funnel(
     if not title:
         title = f"{name_key} {value_keys[0]}漏斗图"
 
-    # 动态生成颜色列表
-    color_list = generate_colors(len(data_list), saturation=saturation, brightness=brightness)
+    # 使用主题色板
+    color_list = get_colors(len(data_list), saturation=saturation, brightness=brightness)
 
-    # 构造配置
+    global_theme = get_theme_global()
     config = {
         "animation": True,
         "animationDuration": 1000,
-        "title": {"text": title, "left": "center"},
+        "backgroundColor": global_theme.get("backgroundColor"),
+        "title": {"text": title, "left": "center", "textStyle": global_theme["title"]["textStyle"]},
         "tooltip": {
             "trigger": "item",
             "formatter": "{a} <br/>{b}: {c} ({d}%)",
-            "backgroundColor": 'rgba(50,50,50,0.9)',
-            "textStyle": {
-                "color": '#fff'
-            },
-            "borderColor": '#333',
-            "borderWidth": 1
+            **global_theme["tooltip"],
         },
         "legend": {
+            **global_theme["legend"],
             "data": [item[name_key] for item in data_list],
-            "left": "center",
-            "bottom": "0%",
-            "textStyle": {
-                "fontSize": 12
-            }
         },
         "series": [
             {
@@ -90,8 +83,9 @@ def generate_echarts_funnel(
                     }
                 },
                 "itemStyle": {
+                    **FUNNEL_ITEM_STYLE,
                     "borderColor": "#fff",
-                    "borderWidth": 1
+                    "borderWidth": 1,
                 },
                 "emphasis": {
                     "label": {

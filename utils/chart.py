@@ -1,5 +1,7 @@
 import colorsys
 
+from utils.theme import get_theme_colors
+
 
 def auto_detect_keys(data_list: list) -> tuple:
     """自动检测数据中的名称字段和值字段"""
@@ -35,16 +37,35 @@ def auto_detect_keys(data_list: list) -> tuple:
 
 def generate_colors(num_colors, saturation=0.5, brightness=0.7):
     """
-    动态生成指定数量的颜色，可自定义饱和度和亮度
+    动态生成指定数量的颜色，可自定义饱和度和亮度。
+    当希望使用 hm-app-analysis 主题色板时，请使用 get_colors(use_theme=True)。
     :param num_colors: 所需颜色的数量
-    :param saturation: 颜色的饱和度，默认值为 0.7
-    :param brightness: 颜色的亮度，默认值为 0.95
+    :param saturation: 颜色的饱和度，默认值为 0.5
+    :param brightness: 颜色的亮度，默认值为 0.7
     :return: 颜色列表
     """
     colors = []
     for i in range(num_colors):
         hue = i / num_colors
-        # 使用用户传入的饱和度和亮度生成颜色
         rgb = colorsys.hsv_to_rgb(hue, saturation, brightness)
         colors.append('#%02x%02x%02x' % tuple(int(c * 255) for c in rgb))
     return colors
+
+
+def get_colors(
+    num_colors: int,
+    saturation: float = 0.5,
+    brightness: float = 0.95,
+    use_theme: bool = True,
+) -> list:
+    """
+    获取图表用色：优先使用 hm-app-analysis 主题色板，否则按饱和度和亮度动态生成。
+    :param num_colors: 所需颜色数量
+    :param saturation: 动态生成时的饱和度（use_theme=False 时有效）
+    :param brightness: 动态生成时的亮度（use_theme=False 时有效）
+    :param use_theme: 是否使用主题色板，默认 True（默认使用 hm-app-analysis 主题）
+    :return: 颜色十六进制字符串列表
+    """
+    if use_theme:
+        return get_theme_colors(num_colors)
+    return generate_colors(num_colors, saturation=saturation, brightness=brightness)

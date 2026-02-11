@@ -1,0 +1,41 @@
+# 只生成 .difypkg，不发布：仅打包并上传为 Artifact 供下载，不会向 dify-plugins 或市场发布
+name: Package Plugin (Manual, No Publish)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Dify CLI
+        run: |
+          mkdir -p $RUNNER_TEMP/bin
+          cd $RUNNER_TEMP/bin
+          wget -q https://github.com/langgenius/dify-plugin-daemon/releases/download/0.5.3/dify-plugin-linux-amd64
+          chmod +x dify-plugin-linux-amd64
+
+      - name: Get version from manifest
+        id: meta
+        run: |
+          PLUGIN_NAME=$(grep "^name:" manifest.yaml | sed 's/^name:[[:space:]]*//')
+          VERSION=$(grep "^version:" manifest.yaml | sed 's/^version:[[:space:]]*//')
+          echo "plugin_name=$PLUGIN_NAME" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Package plugin
+        id: package
+        run: |
+          PACKAGE_NAME="${{ steps.meta.outputs.plugin_name }}-${{ steps.meta.outputs.version }}.difypkg"
+          $RUNNER_TEMP/bin/dify-plugin-linux-amd64 plugin package . -o "$PACKAGE_NAME"
+          echo "package_name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
+          ls -la "$PACKAGE_NAME"
+
+      - name: Upload .difypkg artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: difypkg
+          path: ${{ steps.package.outputs.package_name }}

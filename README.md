@@ -40,6 +40,7 @@ Video tutorial: https://www.bilibili.com/video/BV1qj1CB8Enz
 ### Technical Features
 
 - Generate interactive chart configurations based on ECharts
+- **ECharts 样式参考 hm-app-analysis 项目**：色板、标题/图例/坐标轴/提示框等全局样式与 `hm-app-analysis/src/plugin/echarts/theme.json` 保持一致，便于与现有业务前端统一视觉
 - Integrate large model analysis capabilities to improve the intelligence of chart generation
 - Use pandas for data processing and analysis
 - Adopt modular design, each chart type is independently implemented for easy expansion

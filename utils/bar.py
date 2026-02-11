@@ -1,4 +1,11 @@
-from utils.chart import generate_colors, auto_detect_keys
+from utils.chart import get_colors, auto_detect_keys
+from utils.theme import (
+    get_theme_global,
+    VALUE_AXIS,
+    CATEGORY_AXIS,
+    BAR_ITEM_STYLE,
+    SPLIT_LINE_STYLE,
+)
 import json
 
 def generate_echarts_bar(
@@ -34,29 +41,20 @@ def generate_echarts_bar(
         if field not in data_list[0]:
             raise KeyError(f"数据中未找到字段: '{field}'")
     
-    # 构造配置
+    # 构造配置（合并 hm-app-analysis 主题样式）
+    global_theme = get_theme_global()
     config = {
         "animation": True,
         "animationDuration": 1000,
-        "title": {"text": title, "left": "center"},
+        "backgroundColor": global_theme.get("backgroundColor"),
+        "title": {"text": title, "left": "center", "textStyle": global_theme["title"]["textStyle"]},
         "tooltip": {
-            "trigger": "axis",  # 改为axis触发，更适合多系列图表
+            "trigger": "axis",
             "formatter": "{b}<br/>{a}: {c}",
-            "backgroundColor": 'rgba(50,50,50,0.9)',
-            "textStyle": {
-                "color": '#fff'
-            },
-            "borderColor": '#333',
-            "borderWidth": 1
+            **global_theme["tooltip"],
         },
-        "legend": {  # 新增图例配置
-            "left": "center",
-            "bottom": "0%",
-            "textStyle": {
-                "fontSize": 12
-            }
-        },
-        "series": []
+        "legend": {**global_theme["legend"]},
+        "series": [],
     }
     
     # 按group_key分组生成多系列柱状图
@@ -68,41 +66,20 @@ def generate_echarts_bar(
         x_axis_data = list(set(item[name_key] for item in data_list))
         x_axis_data.sort()  # 排序确保展示顺序一致
         
-        # 为x轴配置
+        # 为x轴配置（主题样式）
         config["xAxis"] = {
             "type": "category",
             "data": x_axis_data,
-            "axisTick": {
-                "alignWithLabel": True
-            },
-            "axisLabel": {
-                "rotate": 45,
-                "interval": 0
-            },
-            "splitLine": {
-                "show": True,
-                "lineStyle": {
-                    "color": ['#eee'],
-                    "type": 'dashed'
-                }
-            }
+            **CATEGORY_AXIS,
+            "axisTick": {"alignWithLabel": True, **CATEGORY_AXIS.get("axisTick", {})},
+            "axisLabel": {"rotate": 45, "interval": 0, **CATEGORY_AXIS.get("axisLabel", {})},
         }
-        
-        # 为y轴配置
-        config["yAxis"] = {
-            "type": "value",
-            "splitLine": {
-                "show": True,
-                "lineStyle": {
-                    "color": ['#eee'],
-                    "type": 'dashed'
-                }
-            }
-        }
-        
-        # 动态生成颜色列表（按分组-指标组合数量生成）
+        # 为y轴配置（主题样式）
+        config["yAxis"] = {"type": "value", **VALUE_AXIS}
+
+        # 使用主题色板（与 hm-app-analysis 一致）
         total_series = len(groups) * len(value_keys)
-        color_list = generate_colors(total_series, saturation=saturation, brightness=brightness)
+        color_list = get_colors(total_series, saturation=saturation, brightness=brightness)
         
         # 图例数据列表
         legend_data = []
@@ -137,11 +114,12 @@ def generate_echarts_bar(
                     "type": "bar",
                     "data": series_data,
                     "itemStyle": {
+                        **BAR_ITEM_STYLE,
                         "color": color_list[color_index],
                         "barBorderRadius": [5, 5, 0, 0],
                         "shadowBlur": 10,
-                        "shadowColor": 'rgba(0, 0, 0, 0.3)'
-                    }
+                        "shadowColor": "rgba(0, 0, 0, 0.3)",
+                    },
                 }
                 config["series"].append(series_config)
                 legend_data.append(full_series_name)
@@ -165,40 +143,19 @@ def generate_echarts_bar(
         if not title:
             title = f"{name_key} {', '.join(value_keys)}分布柱状图"
 
-        # 动态生成颜色列表
-        color_list = generate_colors(len(value_keys), saturation=saturation, brightness=brightness)
-        
-        # 为x轴配置
+        # 使用主题色板
+        color_list = get_colors(len(value_keys), saturation=saturation, brightness=brightness)
+
+        # 为x轴配置（主题样式）
         config["xAxis"] = {
             "type": "category",
             "data": x_axis_data,
-            "axisTick": {
-                "alignWithLabel": True
-            },
-            "axisLabel": {
-                "rotate": 45,
-                "interval": 0
-            },
-            "splitLine": {
-                "show": True,
-                "lineStyle": {
-                    "color": ['#eee'],
-                    "type": 'dashed'
-                }
-            }
+            **CATEGORY_AXIS,
+            "axisTick": {"alignWithLabel": True, **CATEGORY_AXIS.get("axisTick", {})},
+            "axisLabel": {"rotate": 45, "interval": 0, **CATEGORY_AXIS.get("axisLabel", {})},
         }
-        
-        # 为y轴配置
-        config["yAxis"] = {
-            "type": "value",
-            "splitLine": {
-                "show": True,
-                "lineStyle": {
-                    "color": ['#eee'],
-                    "type": 'dashed'
-                }
-            }
-        }
+        # 为y轴配置（主题样式）
+        config["yAxis"] = {"type": "value", **VALUE_AXIS}
         
         # 设置图例数据
         config["legend"]["data"] = series_names
@@ -209,11 +166,12 @@ def generate_echarts_bar(
                 "type": "bar",
                 "data": series_data,
                 "itemStyle": {
+                    **BAR_ITEM_STYLE,
                     "color": color_list[i],
                     "barBorderRadius": [5, 5, 0, 0],
                     "shadowBlur": 10,
-                    "shadowColor": 'rgba(0, 0, 0, 0.3)'
-                }
+                    "shadowColor": "rgba(0, 0, 0, 0.3)",
+                },
             }
             config["series"].append(series_config)
     

@@ -1,4 +1,11 @@
-from utils.chart import generate_colors, auto_detect_keys
+from utils.chart import get_colors, auto_detect_keys
+from utils.theme import (
+    get_theme_global,
+    RADAR_ITEM_STYLE,
+    RADAR_LINE_STYLE,
+    RADAR_SYMBOL,
+    RADAR_SYMBOL_SIZE,
+)
 import json
 
 def generate_echarts_radar(
@@ -44,44 +51,31 @@ def generate_echarts_radar(
         else:
             title = f"{name_key} 多维特征雷达图"
 
-    # 构造配置
+    global_theme = get_theme_global()
     config = {
         "animation": True,
         "animationDuration": 1000,
-        "title": {"text": title, "left": "center"},
+        "backgroundColor": global_theme.get("backgroundColor"),
+        "title": {"text": title, "left": "center", "textStyle": global_theme["title"]["textStyle"]},
         "tooltip": {
             "trigger": "item",
             "formatter": "{a} <br/>{b}: {c}",
-            "backgroundColor": 'rgba(50,50,50,0.9)',
-            "textStyle": {
-                "color": '#fff'
-            },
-            "borderColor": '#333',
-            "borderWidth": 1
+            **global_theme["tooltip"],
         },
+        "legend": global_theme["legend"],
         "radar": {
             "indicator": indicators,
             "radius": "65%",
             "shape": "circle",
             "splitNumber": 5,
-            "axisName": {
-                "color": "#666",
-                "fontSize": 12
-            },
-            "splitLine": {
-                "lineStyle": {
-                    "color": ['#eee'],
-                    "type": 'dashed'
-                }
-            },
+            "axisName": {"color": "#5e5e5e", "fontSize": 12},
+            "splitLine": {"lineStyle": {"color": ["#e0e0e0"], "type": "dashed"}},
             "splitArea": {
                 "show": True,
-                "areaStyle": {
-                    "color": ['rgba(255,255,255,0.2)', 'rgba(238,238,238,0.3)']
-                }
-            }
+                "areaStyle": {"color": ["rgba(255,255,255,0.2)", "rgba(238,238,238,0.3)"]},
+            },
         },
-        "series": []
+        "series": [],
     }
     
     # 按group_key分组生成多系列雷达图
@@ -90,9 +84,9 @@ def generate_echarts_radar(
         groups = list(set(item[group_key] for item in data_list))
         groups.sort()  # 排序确保展示顺序一致
         
-        # 动态生成颜色列表（按分组-指标组合数量生成）
+        # 使用主题色板
         total_series = len(groups) * len(value_keys)
-        color_list = generate_colors(total_series, saturation=saturation, brightness=brightness)
+        color_list = get_colors(total_series, saturation=saturation, brightness=brightness)
         
         # 图例数据列表
         legend_data = []
@@ -122,17 +116,11 @@ def generate_echarts_radar(
                     "name": full_series_name,
                     "type": "radar",
                     "data": group_series_data,
-                    "symbolSize": 6,
-                    "lineStyle": {
-                        "width": 2,
-                        "color": color_list[color_index]
-                    },
-                    "itemStyle": {
-                        "color": color_list[color_index]
-                    },
-                    "areaStyle": {
-                        "opacity": 0.3
-                    }
+                    "symbol": RADAR_SYMBOL,
+                    "symbolSize": RADAR_SYMBOL_SIZE,
+                    "lineStyle": {**RADAR_LINE_STYLE, "color": color_list[color_index]},
+                    "itemStyle": {**RADAR_ITEM_STYLE, "color": color_list[color_index]},
+                    "areaStyle": {"opacity": 0.3},
                 }
                 config["series"].append(series_config)
                 legend_data.append(full_series_name)
@@ -157,29 +145,22 @@ def generate_echarts_radar(
                 "name": item[name_key]
             })
         
-        # 动态生成颜色列表
-        color_list = generate_colors(len(data_list), saturation=saturation, brightness=brightness)
-        
+        # 使用主题色板
+        color_list = get_colors(len(data_list), saturation=saturation, brightness=brightness)
+
         config["legend"] = {
+            **config["legend"],
             "data": [item[name_key] for item in data_list],
-            "left": "center",
-            "bottom": "0%",
-            "textStyle": {
-                "fontSize": 12
-            }
         }
-        
         series_config = {
             "name": series_names[0],
             "type": "radar",
             "data": series_data,
-            "symbolSize": 6,
-            "lineStyle": {
-                "width": 2
-            },
-            "areaStyle": {
-                "opacity": 0.3
-            }
+            "symbol": RADAR_SYMBOL,
+            "symbolSize": RADAR_SYMBOL_SIZE,
+            "lineStyle": RADAR_LINE_STYLE,
+            "itemStyle": RADAR_ITEM_STYLE,
+            "areaStyle": {"opacity": 0.3},
         }
         config["series"].append(series_config)
         config["color"] = color_list

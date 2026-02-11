@@ -1,4 +1,5 @@
-from utils.chart import generate_colors, auto_detect_keys
+from utils.chart import get_colors, auto_detect_keys
+from utils.theme import get_theme_global, PIE_ITEM_STYLE
 import json
 
 def generate_echarts_pie(
@@ -47,38 +48,28 @@ def generate_echarts_pie(
     min_radius = 30   # 最小内径
     ring_width = (max_radius - min_radius) / len(all_echarts_data) if len(all_echarts_data) > 1 else 20
 
-    # 生成颜色列表，按数据项数量生成，传入饱和度和亮度
-    color_list = generate_colors(len(data_list), saturation=saturation, brightness=brightness)
+    # 使用主题色板（与 hm-app-analysis 一致）
+    color_list = get_colors(len(data_list), saturation=saturation, brightness=brightness)
 
-    # 构造单个配置对象
+    global_theme = get_theme_global()
     config = {
         "animation": True,
         "animationDuration": 1000,
         "animationEasing": "cubicOut",
+        "backgroundColor": global_theme.get("backgroundColor"),
         "title": {
             "text": title,
             "left": "center",
-            "textStyle": {
-                "fontSize": 16,
-                "fontWeight": "bold"
-            }
+            "textStyle": {**global_theme["title"]["textStyle"], "fontSize": 16, "fontWeight": "bold"},
         },
         "tooltip": {
             "trigger": "item",
-            "formatter": "{a}<br/>{b}: {c} ({d}%)"
+            "formatter": "{a}<br/>{b}: {c} ({d}%)",
+            **global_theme["tooltip"],
         },
-        "legend": {
-            "type": "scroll",  # 添加滚动功能
-            "orient": "horizontal",  # 水平布局
-            "left": "center",
-            "bottom": "0%",  # 图例放在底部
-            "textStyle": {
-                "fontSize": 10  # 减小字体大小
-            },
-            "data": legend_data
-        },
+        "legend": {**global_theme["legend"], "data": legend_data},
         "series": [],
-        "color": color_list
+        "color": color_list,
     }
 
     # 计算每个系列的半径，避免饼图重叠
@@ -96,9 +87,8 @@ def generate_echarts_pie(
             "radius": [f"{inner_radius}%", f"{outer_radius}%"],  # 调整每个系列的半径
             "avoidLabelOverlap": True,  # 开启标签重叠处理
             "itemStyle": {
+                **PIE_ITEM_STYLE,
                 "borderRadius": 10,
-                "borderColor": "#fff",
-                "borderWidth": 2
             },
             "label": {
                 "show": False,

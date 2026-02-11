@@ -1,4 +1,5 @@
-from utils.chart import generate_colors, auto_detect_keys
+from utils.chart import get_colors, auto_detect_keys
+from utils.theme import get_theme_global, VALUE_AXIS, SPLIT_LINE_STYLE
 import json
 
 def generate_echarts_scatter(
@@ -50,41 +51,25 @@ def generate_echarts_scatter(
         else:
             title = f"{name_key} {value_keys[0]}与{value_keys[1]}关系散点图"
 
+    global_theme = get_theme_global()
     config = {
         "animation": True,
         "animationDuration": 1000,
-        "title": {"text": title, "left": "center"},
-        "tooltip": {
-            "backgroundColor": 'rgba(50,50,50,0.9)',
-            "textStyle": {
-                "color": '#fff'
-            },
-            "borderColor": '#333',
-            "borderWidth": 1
-        },
+        "backgroundColor": global_theme.get("backgroundColor"),
+        "title": {"text": title, "left": "center", "textStyle": global_theme["title"]["textStyle"]},
+        "tooltip": {**global_theme["tooltip"]},
+        "legend": global_theme["legend"],
         "xAxis": {
             "type": "value",
             "name": value_keys[0],
-            "splitLine": {
-                "show": True,
-                "lineStyle": {
-                    "color": ['#eee'],
-                    "type": 'dashed'
-                }
-            }
+            **VALUE_AXIS,
         },
         "yAxis": {
             "type": "value",
             "name": value_keys[1],
-            "splitLine": {
-                "show": True,
-                "lineStyle": {
-                    "color": ['#eee'],
-                    "type": 'dashed'
-                }
-            }
+            **VALUE_AXIS,
         },
-        "series": []
+        "series": [],
     }
 
     # 处理分组逻辑
@@ -92,7 +77,7 @@ def generate_echarts_scatter(
         # 获取所有唯一的分组值
         groups = set(item.get(group_key) for item in data_list)
         groups = sorted(groups)  # 排序确保展示顺序一致
-        colors = generate_colors(len(groups), saturation=saturation, brightness=brightness)
+        colors = get_colors(len(groups), saturation=saturation, brightness=brightness)
         
         # 为每个分组创建系列
         for i, group_value in enumerate(groups):
@@ -134,14 +119,7 @@ def generate_echarts_scatter(
             config["series"].append(series_config)
         
         # 添加图例
-        config["legend"] = {
-            "data": [str(g) for g in groups],
-            "left": "center",
-            "bottom": "0%",
-            "textStyle": {
-                "fontSize": 12
-            }
-        }
+        config["legend"] = {**config["legend"], "data": [str(g) for g in groups]}
         
         # 调整网格以适应图例
         config["grid"] = {
@@ -162,7 +140,7 @@ def generate_echarts_scatter(
                 data_point.append(item[name_key])
             scatter_data.append(data_point)
         
-        color_list = generate_colors(1, saturation=saturation, brightness=brightness)
+        color_list = get_colors(1, saturation=saturation, brightness=brightness)
         
         series_config = {
             "name": series_names[0],
