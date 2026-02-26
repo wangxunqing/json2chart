@@ -11,6 +11,9 @@ from utils.bar import generate_echarts_bar
 from utils.radar import generate_echarts_radar
 from utils.funnel import generate_echarts_funnel
 from utils.scatter import generate_echarts_scatter
+from utils.donut import generate_echarts_donut
+from utils.dual_axis import generate_echarts_dual_axis
+from utils.stacked_bar import generate_echarts_stacked_bar
 
 
 from dify_plugin.entities.model.llm import LLMModelConfig
@@ -63,7 +66,7 @@ class Json2chartTool(Tool):
                             content="""
                             你是一个专业的数据可视化专家，需要根据给定的 Markdown 表格数据，判断合适的横坐标和纵坐标，用于生成可视化图表。请遵循以下规则：
                             1. 输出格式必须为 JSON，包含`chart_type`, `chart_title`, `name_key`, `value_keys`, `series_names` 字段。
-                            2. `chart_type` 的值为字符串，代表图表类型，目前支持"柱状图"、"折线图"、"饼状图"、"雷达图"、"漏斗图"、"散点图"。若用户指定了图表类型，则按用户的来，若没有指定，则你根据表格样例信息自动判断。
+                            2. `chart_type` 的值为字符串，代表图表类型，目前支持"柱状图"、"折线图"、"饼状图"、"雷达图"、"漏斗图"、"散点图"、"环形图"、"双轴图"、"堆叠柱状图"。若用户指定了图表类型，则按用户的来，若没有指定，则你根据表格样例信息自动判断。
                             3. `chart_title` 的值为字符串，代表图表标题，若用户指定了标题，则按用户的来，若没有指定，则你根据表格样例信息自动生成。
                             4. `name_key` 的值为一个字符串，代表横坐标的 key，必须为 Markdown 表格中已有的表头字段，且应为类别型数据。
                             5. `value_keys` 的值为一个字符串数组，代表纵坐标的 key，这些 key 必须为 Markdown 表格中已有的表头字段，且必须为数值类型数据。
@@ -76,7 +79,9 @@ class Json2chartTool(Tool):
                             12. 当数据中存在明显的分组维度（如多个课程、多个产品等）且需要比较它们在同一指标上的差异时，应识别出合适的`group_key`，group_key应是类别型字段。
                             13. 对于散点图，当需要按类别区分不同数据点时，应将类别型字段设置为group_key，而不是name_key。
                             14. 请仔细识别数据类型，确保value_keys只包含可以进行数学运算的数值字段，避免选择文本或混合类型字段。
-                            15. 只输出标准的 json 格式内容，不要包含```json```标签，不要输出其他任何文字。
+                            15. 对于双轴图，请额外输出 `bar_value_keys`（柱状图指标数组）和 `line_value_keys`（折线图指标数组）。
+                            16. 对于环形图，如果可以计算出总额或有明确的中心文本，请输出 `center_text` 字段。
+                            17. 只输出标准的 json 格式内容，不要包含```json```标签，不要输出其他任何文字。
                             
                             示例：
                             表格数据：
@@ -97,6 +102,9 @@ class Json2chartTool(Tool):
                             
                             散点图输出（例如产品价格与销量关系分析）：
                             {"chart_type":"散点图","chart_title":"产品价格与销量关系分析","name_key":"产品名称","value_keys":["价格(元)","月销量(台)"],"series_names":["价格(元)","月销量(台)"],"group_key":"品牌"}
+
+                            双轴图输出（例如税负率和同比变动率）：
+                            {"chart_type":"双轴图","chart_title":"税负率分析","name_key":"月份","value_keys":["税负率","同比变动率"],"series_names":["税负率","同比变动率"],"bar_value_keys":["税负率"],"line_value_keys":["同比变动率"]}
                             """
                         ),
                         UserPromptMessage(
@@ -125,6 +133,10 @@ class Json2chartTool(Tool):
                 series_names = config_params["series_names"]
                 # group_key是可选的
                 group_key = config_params.get("group_key")
+                # 新增图表类型的可选参数
+                bar_value_keys = config_params.get("bar_value_keys")
+                line_value_keys = config_params.get("line_value_keys")
+                center_text = config_params.get("center_text")
 
                 if len(value_keys) != len(series_names):
                     raise ValueError("value_keys 和 series_names 的长度不一致")
@@ -217,17 +229,31 @@ class Json2chartTool(Tool):
                         raise ValueError(f"字段 {value_key} 不是有效的数值类型: {str(e)}")
                 
                 # 根据图表类型生成 ECharts 配置
-                supported_chart_types = ["饼状图", "柱状图", "折线图", "雷达图", "漏斗图", "散点图"]
+                supported_chart_types = ["饼状图", "柱状图", "折线图", "雷达图", "漏斗图", "散点图", "环形图", "双轴图", "堆叠柱状图"]
                 if chart_type not in supported_chart_types:
                     yield self.create_text_message(f"不支持的图表类型: {chart_type}")
                     return
 
                 if chart_type == "饼状图":
                     echarts_config = generate_echarts_pie(data_list, name_key=name_key, title=chart_title, value_keys=value_keys, series_names=series_names, saturation=saturation, brightness=brightness)
+                elif chart_type == "环形图":
+                    echarts_config = generate_echarts_donut(data_list, name_key=name_key, title=chart_title, value_key=value_keys[0], center_text=center_text, saturation=saturation, brightness=brightness)
                 elif chart_type == "柱状图":
                     echarts_config = generate_echarts_bar(data_list, name_key=name_key, title=chart_title, value_keys=value_keys, series_names=series_names, saturation=saturation, brightness=brightness, group_key=group_key)
+                elif chart_type == "堆叠柱状图":
+                    echarts_config = generate_echarts_stacked_bar(data_list, name_key=name_key, title=chart_title, value_keys=value_keys, series_names=series_names, saturation=saturation, brightness=brightness)
                 elif chart_type == "折线图":
                     echarts_config = generate_echarts_line(data_list, name_key=name_key, title=chart_title, value_keys=value_keys, series_names=series_names, saturation=saturation, brightness=brightness, group_key=group_key)
+                elif chart_type == "双轴图":
+                    # 尝试智能推断 bar_value_keys 和 line_value_keys
+                    if not bar_value_keys and not line_value_keys:
+                         if len(value_keys) >= 2:
+                             bar_value_keys = [value_keys[0]]
+                             line_value_keys = value_keys[1:]
+                         else:
+                             bar_value_keys = value_keys
+                             line_value_keys = []
+                    echarts_config = generate_echarts_dual_axis(data_list, name_key=name_key, title=chart_title, bar_value_keys=bar_value_keys, line_value_keys=line_value_keys, saturation=saturation, brightness=brightness)
                 elif chart_type == "雷达图":
                     echarts_config = generate_echarts_radar(data_list, name_key=name_key, title=chart_title, value_keys=value_keys, series_names=series_names, saturation=saturation, brightness=brightness, group_key=group_key)
                 elif chart_type == "漏斗图":
