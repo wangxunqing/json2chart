@@ -134,9 +134,54 @@ class Json2chartTool(Tool):
                 # group_key是可选的
                 group_key = config_params.get("group_key")
                 # 新增图表类型的可选参数
-                bar_value_keys = config_params.get("bar_value_keys")
-                line_value_keys = config_params.get("line_value_keys")
+                bar_value_keys = config_params.get("bar_value_keys", [])
+                line_value_keys = config_params.get("line_value_keys", [])
                 center_text = config_params.get("center_text")
+
+                # 针对双轴图的特殊处理：确保 value_keys 包含 bar_value_keys 和 line_value_keys
+                if chart_type == "双轴图":
+                    # 如果 bar_value_keys 或 line_value_keys 不存在，尝试从 value_keys 中拆分
+                    if not bar_value_keys and not line_value_keys:
+                        if len(value_keys) >= 2:
+                            bar_value_keys = [value_keys[0]]
+                            line_value_keys = value_keys[1:]
+                        else:
+                            bar_value_keys = value_keys
+                            line_value_keys = []
+                    
+                    # 重新构建 value_keys 和 series_names，确保后续的数值转换逻辑能覆盖到
+                    # 注意：这里会覆盖大模型返回的 value_keys，以 bar_value_keys + line_value_keys 为准
+                    all_keys = []
+                    all_names = []
+                    
+                    for key in bar_value_keys:
+                        if key not in all_keys:
+                            all_keys.append(key)
+                            # 尝试找对应的 series_name，如果没有则用 key
+                            if key in value_keys:
+                                index = value_keys.index(key)
+                                if index < len(series_names):
+                                    all_names.append(series_names[index])
+                                else:
+                                    all_names.append(key)
+                            else:
+                                all_names.append(key)
+                                
+                    for key in line_value_keys:
+                        if key not in all_keys:
+                            all_keys.append(key)
+                            # 尝试找对应的 series_name
+                            if key in value_keys:
+                                index = value_keys.index(key)
+                                if index < len(series_names):
+                                    all_names.append(series_names[index])
+                                else:
+                                    all_names.append(key)
+                            else:
+                                all_names.append(key)
+                    
+                    value_keys = all_keys
+                    series_names = all_names
 
                 if len(value_keys) != len(series_names):
                     raise ValueError("value_keys 和 series_names 的长度不一致")
@@ -211,9 +256,9 @@ class Json2chartTool(Tool):
                         raise ValueError("散点图需要至少一个数值字段")
                 elif chart_type == "雷达图" and len(value_keys) < 3:
                     raise ValueError("雷达图需要至少三个数值字段进行多维度分析")
-                elif chart_type == "饼状图" and len(value_keys) != 1:
-                    # 饼图只使用第一个数值字段
-                    yield self.create_text_message("饼图只支持一个数值字段，将使用第一个字段")
+                elif (chart_type == "饼状图" or chart_type == "环形图") and len(value_keys) != 1:
+                    # 饼图和环形图只使用第一个数值字段
+                    yield self.create_text_message(f"{chart_type}只支持一个数值字段，将使用第一个字段")
                     value_keys = value_keys[:1]
                     series_names = series_names[:1]
                 
@@ -245,14 +290,7 @@ class Json2chartTool(Tool):
                 elif chart_type == "折线图":
                     echarts_config = generate_echarts_line(data_list, name_key=name_key, title=chart_title, value_keys=value_keys, series_names=series_names, saturation=saturation, brightness=brightness, group_key=group_key)
                 elif chart_type == "双轴图":
-                    # 尝试智能推断 bar_value_keys 和 line_value_keys
-                    if not bar_value_keys and not line_value_keys:
-                         if len(value_keys) >= 2:
-                             bar_value_keys = [value_keys[0]]
-                             line_value_keys = value_keys[1:]
-                         else:
-                             bar_value_keys = value_keys
-                             line_value_keys = []
+                    # 直接调用，参数已经在前面处理好了
                     echarts_config = generate_echarts_dual_axis(data_list, name_key=name_key, title=chart_title, bar_value_keys=bar_value_keys, line_value_keys=line_value_keys, saturation=saturation, brightness=brightness)
                 elif chart_type == "雷达图":
                     echarts_config = generate_echarts_radar(data_list, name_key=name_key, title=chart_title, value_keys=value_keys, series_names=series_names, saturation=saturation, brightness=brightness, group_key=group_key)

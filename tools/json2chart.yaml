@@ -40,8 +40,8 @@ parameters:
       zh_Hans: 图表类型
     human_description:
       en_US: Please input the chart type
-      zh_Hans: 请输入图表类型，目前支持柱状图，饼状图，折线图，雷达图，散点图，漏斗图，如果不写则由大模型自己生成
-    llm_description: chart_type,support bar, pie, line, radar, scatter, funnel
+      zh_Hans: 请输入图表类型，目前支持柱状图，饼状图，折线图，雷达图，散点图，漏斗图，环形图，双轴图，堆叠柱状图，如果不写则由大模型自己生成
+    llm_description: chart_type,support bar, pie, line, radar, scatter, funnel, donut, dual_axis, stacked_bar
     form: llm
   - name: saturation
     type: number
