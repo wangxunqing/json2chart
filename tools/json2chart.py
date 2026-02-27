@@ -43,7 +43,12 @@ class Json2chartTool(Tool):
             data_list = df.to_dict(orient='records')  # 将 DataFrame 转换为列表
 
             # 提取数据样本时，优先使用去重后的数据，确保展示所有类型
-            unique_df = df.drop_duplicates()
+            try:
+                unique_df = df.drop_duplicates()
+            except TypeError:
+                # 如果包含不可哈希的类型（如列表），则跳过去重
+                unique_df = df
+            
             if len(unique_df) > 20:
                 sample_df = unique_df.head(20)
             else:
