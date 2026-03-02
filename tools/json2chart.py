@@ -36,17 +36,17 @@ class Json2chartTool(Tool):
             try:
                 chart_data = json.loads(chart_data)
             except json.JSONDecodeError:
-                # 尝试修复常见的转义字符问题（如 \" -> "）或空白字符问题（如 NBSP）
+                # 尝试修复常见的转义字符问题（如 \" -> "）或空白字符问题（如 NBSP, \n）
                 try:
-                    # 1. 替换非标准空白字符
-                    cleaned_data = chart_data.replace('\xa0', ' ')
+                    # 1. 替换非标准空白字符和字面量换行符
+                    cleaned_data = chart_data.replace('\xa0', ' ').replace('\\n', ' ')
                     # 2. 替换转义引号
                     unescaped_data = cleaned_data.replace('\\"', '"')
                     chart_data = json.loads(unescaped_data)
                 except json.JSONDecodeError:
                     # 如果上面的组合修复失败，尝试单独修复空白字符再试一次
                     try:
-                        chart_data = json.loads(chart_data.replace('\xa0', ' '))
+                        chart_data = json.loads(chart_data.replace('\xa0', ' ').replace('\\n', ' '))
                     except json.JSONDecodeError:
                         yield self.create_text_message("图表数据不是有效的 JSON 格式")
                         return
