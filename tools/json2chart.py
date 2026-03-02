@@ -5,6 +5,7 @@ from typing import Any
 from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 import json
+import re
 from utils.pie import generate_echarts_pie
 from utils.line import generate_echarts_line
 from utils.bar import generate_echarts_bar
@@ -124,8 +125,16 @@ class Json2chartTool(Tool):
 
             # 提取大模型返回的 JSON 数据
             try:
-                print("大模型输出的json:", response.message.content)
-                config_params = json.loads(response.message.content)
+                content = response.message.content.strip()
+                # 尝试去除 markdown 代码块标记
+                if "```" in content:
+                    pattern = r"```(?:json)?\s*(.*?)\s*```"
+                    match = re.search(pattern, content, re.DOTALL)
+                    if match:
+                        content = match.group(1)
+                
+                print("大模型输出的json (清洗后):", content)
+                config_params = json.loads(content)
                 required_fields = ["chart_type", "chart_title", "name_key", "value_keys", "series_names"]
                 for field in required_fields:
                     if field not in config_params:
