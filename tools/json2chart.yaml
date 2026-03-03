@@ -21,6 +21,17 @@ parameters:
       zh_Hans: 请输入图表数据[标准json格式]
     llm_description: please input the chart data in standard json format
     form: llm
+  - name: data_desc
+    type: string
+    required: false
+    label:
+      en_US: data_desc
+      zh_Hans: 数据补充说明
+    human_description:
+      en_US: Please input additional data description or mapping
+      zh_Hans: 请输入数据的补充说明映射等
+    llm_description: additional data description or mapping
+    form: llm
   - name: chart_title
     type: string
     required: false

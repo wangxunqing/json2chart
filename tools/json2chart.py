@@ -27,6 +27,7 @@ class Json2chartTool(Tool):
         chart_data = tool_parameters.get("chart_data", [])
         chart_title = tool_parameters.get("chart_title")
         chart_type = tool_parameters.get("chart_type")
+        data_desc = tool_parameters.get("data_desc")
         model = tool_parameters.get("model")
         saturation = tool_parameters.get("saturation", 0.5)
         brightness = tool_parameters.get("brightness", 0.95)
@@ -126,7 +127,7 @@ class Json2chartTool(Tool):
                             """
                         ),
                         UserPromptMessage(
-                            content=f"用户指定的类型：{chart_type}\n用户指定的标题：{chart_title}\n表格的样例数据:\n{sample_markdown}"
+                            content=f"用户指定的类型：{chart_type}\n用户指定的标题：{chart_title}\n数据补充说明：{data_desc}\n表格的样例数据:\n{sample_markdown}"
                         )
                     ],
                     stream=False
