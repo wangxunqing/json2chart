@@ -310,6 +310,8 @@ class Json2chartTool(Tool):
                         name_key = "category"
                         value_keys = ["value"]
                         series_names = ["数值"]
+                        # 更新 df，确保后续验证逻辑能找到新的字段
+                        df = pd.DataFrame(data_list)
                         yield self.create_text_message(f"数据转置完成，生成 {len(data_list)} 个数据项")
 
                 # 验证字段是否为数值类型
