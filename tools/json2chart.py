@@ -94,7 +94,7 @@ class Json2chartTool(Tool):
                             8. 请根据 markdown 表格数据内容，抓取对数据分析有展现价值的 key。
                             9. 确保横纵坐标的选取有数据分析意义，避免选取序号等无分析价值的字段。
                             10. 雷达图适合多维度对比分析，至少需要3个数值字段；散点图适合两个数值指标间的相关性分析，必须选择两个数值字段作为value_keys，name_key应选择类别型或ID型字段（不是数值字段）；漏斗图适合流程转化率分析，需要有明确的先后顺序。
-                            11. 饼图通常只使用一个数值字段和一个类别字段；柱状图和折线图适合展示类别与数值的关系。
+                            11. 饼图和环形图支持多个数值字段（生成同心圆），若需展示多维数据占比可选择多个value_keys；柱状图和折线图适合展示类别与数值的关系。
                             12. 当数据中存在明显的分组维度（如多个课程、多个产品等）且需要比较它们在同一指标上的差异时，应识别出合适的`group_key`，group_key应是类别型字段。
                             13. 对于散点图，当需要按类别区分不同数据点时，应将类别型字段设置为group_key，而不是name_key。
                             14. 请仔细识别数据类型，确保value_keys只包含可以进行数学运算的数值字段，避免选择文本或混合类型字段。
@@ -283,12 +283,35 @@ class Json2chartTool(Tool):
                         raise ValueError("散点图需要至少一个数值字段")
                 elif chart_type == "雷达图" and len(value_keys) < 3:
                     raise ValueError("雷达图需要至少三个数值字段进行多维度分析")
-                elif (chart_type == "饼状图" or chart_type == "环形图") and len(value_keys) != 1:
-                    # 饼图和环形图只使用第一个数值字段
-                    yield self.create_text_message(f"{chart_type}只支持一个数值字段，将使用第一个字段")
-                    value_keys = value_keys[:1]
-                    series_names = series_names[:1]
-                
+
+                # 特殊处理：单行宽表数据自动转置
+                # 当饼图/环形图只有一行数据，但有多个数值列时，很可能是宽表结构（列名即类别）
+                # 此时应该转置数据，将列名作为name_key，列值作为value_key
+                if chart_type in ["饼状图", "环形图"] and len(data_list) == 1 and len(value_keys) > 1:
+                    yield self.create_text_message(f"检测到单行多列数据，正在为{chart_type}进行自动转置处理...")
+                    transposed_data = []
+                    row = data_list[0]
+                    for i, key in enumerate(value_keys):
+                        # 尝试使用series_names作为类别名（如果有）
+                        category_name = series_names[i] if i < len(series_names) else key
+                        # 尝试转换数值
+                        try:
+                            val = float(row[key])
+                            transposed_data.append({
+                                "category": category_name,
+                                "value": val
+                            })
+                        except (ValueError, TypeError):
+                            continue
+                    
+                    if transposed_data:
+                        # 更新上下文变量
+                        data_list = transposed_data
+                        name_key = "category"
+                        value_keys = ["value"]
+                        series_names = ["数值"]
+                        yield self.create_text_message(f"数据转置完成，生成 {len(data_list)} 个数据项")
+
                 # 验证字段是否为数值类型
                 for value_key in value_keys:
                     try:
@@ -309,7 +332,7 @@ class Json2chartTool(Tool):
                 if chart_type == "饼状图":
                     echarts_config = generate_echarts_pie(data_list, name_key=name_key, title=chart_title, value_keys=value_keys, series_names=series_names, saturation=saturation, brightness=brightness)
                 elif chart_type == "环形图":
-                    echarts_config = generate_echarts_donut(data_list, name_key=name_key, title=chart_title, value_key=value_keys[0], center_text=center_text, saturation=saturation, brightness=brightness)
+                    echarts_config = generate_echarts_donut(data_list, name_key=name_key, title=chart_title, value_keys=value_keys, center_text=center_text, saturation=saturation, brightness=brightness)
                 elif chart_type == "柱状图":
                     echarts_config = generate_echarts_bar(data_list, name_key=name_key, title=chart_title, value_keys=value_keys, series_names=series_names, saturation=saturation, brightness=brightness, group_key=group_key)
                 elif chart_type == "堆叠柱状图":
