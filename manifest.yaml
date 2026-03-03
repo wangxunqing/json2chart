@@ -1,6 +1,6 @@
 version: 1.3.0
 type: plugin
-author: lfenghx、hm
+author: lfenghx
 name: json2chart
 label:
   en_US: json2chart
