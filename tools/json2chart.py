@@ -5,6 +5,7 @@ from typing import Any
 from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 import json
+import ast
 import re
 from utils.pie import generate_echarts_pie
 from utils.line import generate_echarts_line
@@ -22,6 +23,198 @@ from dify_plugin.entities.model.message import SystemPromptMessage, UserPromptMe
 import pandas as pd
 
 class Json2chartTool(Tool):
+    def _parse_chart_data_text(self, chart_data_text: str) -> Any:
+        candidates = []
+        raw = (chart_data_text or "").strip()
+        candidates.append(raw)
+        candidates.append(raw.replace('\xa0', ' ').replace('\\n', ' '))
+        candidates.append(raw.replace('\xa0', ' ').replace('\\n', ' ').replace('\\"', '"'))
+        try:
+            candidates.append(raw.encode("utf-8").decode("unicode_escape"))
+        except Exception:
+            pass
+
+        for candidate in candidates:
+            if not candidate:
+                continue
+            try:
+                parsed = json.loads(candidate)
+                if isinstance(parsed, str):
+                    try:
+                        parsed = json.loads(parsed)
+                    except Exception:
+                        pass
+                return parsed
+            except json.JSONDecodeError:
+                try:
+                    parsed = ast.literal_eval(candidate)
+                    if isinstance(parsed, str):
+                        try:
+                            parsed = json.loads(parsed)
+                        except Exception:
+                            pass
+                    return parsed
+                except Exception:
+                    continue
+        raise ValueError("图表数据不是有效的 JSON 格式")
+
+    def _parse_numeric_value(self, value: Any) -> float | None:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            normalized = value.strip().replace(",", "")
+            if not normalized:
+                return None
+            try:
+                return float(normalized)
+            except ValueError:
+                return None
+        return None
+
+    def _is_numeric_like(self, value: Any) -> bool:
+        return self._parse_numeric_value(value) is not None
+
+    def _get_unit_factor(self, value_unit: str) -> float:
+        unit = (value_unit or "").strip()
+        unit_factor_map = {
+            "元": 1.0,
+            "万元": 10000.0,
+            "亿元": 100000000.0,
+        }
+        return unit_factor_map.get(unit, 10000.0)
+
+    def _scale_value(self, value: Any, factor: float) -> Any:
+        if isinstance(value, bool):
+            return value
+        numeric_value = self._parse_numeric_value(value)
+        if numeric_value is not None:
+            return round(numeric_value / factor, 6)
+        return value
+
+    def _auto_detect_keys_with_numeric_string(self, data_list: list[dict[str, Any]]) -> tuple[str, list[str]]:
+        if not data_list:
+            raise ValueError("数据列表不能为空")
+        sample = data_list[0]
+        if not isinstance(sample, dict):
+            raise ValueError("数据项格式不正确，期望为对象列表")
+
+        name_candidates = []
+        value_candidates = []
+        for key, value in sample.items():
+            if self._is_numeric_like(value):
+                value_candidates.append(key)
+            elif isinstance(value, str):
+                name_candidates.append(key)
+
+        if not name_candidates:
+            raise ValueError("数据中不包含类别字段，无法确定名称字段")
+        if not value_candidates:
+            raise ValueError("数据中不包含可转换为数值的字段，无法确定值字段")
+
+        common_name_keys = ["name", "名称", "类别", "category", "label", "项目", "月份", "日期", "时间"]
+        name_key = next((k for k in common_name_keys if k in name_candidates), name_candidates[0])
+        return name_key, value_candidates
+
+    def _convert_single_row_wide_table(
+        self,
+        data_list: list[dict[str, Any]],
+        value_keys: list[str] | None = None,
+        series_names: list[str] | None = None,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        if len(data_list) != 1 or not isinstance(data_list[0], dict):
+            return data_list, False
+
+        row = data_list[0]
+        candidate_keys = value_keys or [k for k, v in row.items() if self._is_numeric_like(v)]
+        transposed_data = []
+        for i, key in enumerate(candidate_keys):
+            if key not in row:
+                continue
+            numeric_value = self._parse_numeric_value(row.get(key))
+            if numeric_value is None:
+                continue
+            category_name = series_names[i] if series_names and i < len(series_names) else key
+            transposed_data.append({"category": category_name, "value": numeric_value})
+
+        if not transposed_data:
+            return data_list, False
+        return transposed_data, True
+
+    def _scale_series_data(self, data: Any, factor: float) -> Any:
+        if isinstance(data, list):
+            scaled = []
+            for item in data:
+                if isinstance(item, dict):
+                    new_item = dict(item)
+                    if "value" in new_item:
+                        if isinstance(new_item["value"], list):
+                            new_item["value"] = [self._scale_value(v, factor) for v in new_item["value"]]
+                        else:
+                            new_item["value"] = self._scale_value(new_item["value"], factor)
+                    scaled.append(new_item)
+                elif isinstance(item, list):
+                    if len(item) >= 2:
+                        new_point = list(item)
+                        new_point[1] = self._scale_value(new_point[1], factor)
+                        scaled.append(new_point)
+                    else:
+                        scaled.append(item)
+                else:
+                    scaled.append(self._scale_value(item, factor))
+            return scaled
+        return data
+
+    def _add_unit_to_formatter(self, formatter: Any, value_unit: str) -> Any:
+        if not isinstance(formatter, str) or not value_unit:
+            return formatter
+        updated = formatter
+        for token in ["{c}", "{c0}", "{c1}", "{c2}", "{c[0]}", "{c[1]}", "{c[2]}"]:
+            updated = updated.replace(token, f"{token}{value_unit}")
+        return updated
+
+    def _apply_value_unit(self, echarts_config: str, value_unit: str) -> str:
+        factor = self._get_unit_factor(value_unit)
+        try:
+            config = json.loads(echarts_config)
+        except Exception:
+            return echarts_config
+
+        tooltip = config.get("tooltip")
+        if isinstance(tooltip, dict) and "formatter" in tooltip:
+            tooltip["formatter"] = self._add_unit_to_formatter(tooltip.get("formatter"), value_unit)
+
+        y_axis = config.get("yAxis")
+        if isinstance(y_axis, dict):
+            y_axis["name"] = value_unit
+            axis_label = y_axis.get("axisLabel", {})
+            if isinstance(axis_label, dict):
+                axis_label["formatter"] = f"{{value}}{value_unit}"
+                y_axis["axisLabel"] = axis_label
+        elif isinstance(y_axis, list):
+            for axis in y_axis:
+                if not isinstance(axis, dict):
+                    continue
+                axis_name = axis.get("name")
+                axis["name"] = f"{axis_name}{value_unit}" if axis_name else value_unit
+                axis_label = axis.get("axisLabel", {})
+                if isinstance(axis_label, dict):
+                    axis_label["formatter"] = f"{{value}}{value_unit}"
+                    axis["axisLabel"] = axis_label
+
+        series_list = config.get("series")
+        if isinstance(series_list, list):
+            for series in series_list:
+                if not isinstance(series, dict):
+                    continue
+                if "data" in series:
+                    series["data"] = self._scale_series_data(series["data"], factor)
+                series_tooltip = series.get("tooltip")
+                if isinstance(series_tooltip, dict) and "formatter" in series_tooltip:
+                    series_tooltip["formatter"] = self._add_unit_to_formatter(series_tooltip.get("formatter"), value_unit)
+
+        return json.dumps(config, indent=4, ensure_ascii=False)
     
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage]:
         chart_data = tool_parameters.get("chart_data", [])
@@ -31,26 +224,15 @@ class Json2chartTool(Tool):
         model = tool_parameters.get("model")
         saturation = tool_parameters.get("saturation", 0.5)
         brightness = tool_parameters.get("brightness", 0.95)
+        value_unit = tool_parameters.get("value_unit", "万元")
         
         # 检查 chart_data 是否为字符串，若是则尝试解析为 JSON
         if isinstance(chart_data, str):
             try:
-                chart_data = json.loads(chart_data)
-            except json.JSONDecodeError:
-                # 尝试修复常见的转义字符问题（如 \" -> "）或空白字符问题（如 NBSP, \n）
-                try:
-                    # 1. 替换非标准空白字符和字面量换行符
-                    cleaned_data = chart_data.replace('\xa0', ' ').replace('\\n', ' ')
-                    # 2. 替换转义引号
-                    unescaped_data = cleaned_data.replace('\\"', '"')
-                    chart_data = json.loads(unescaped_data)
-                except json.JSONDecodeError:
-                    # 如果上面的组合修复失败，尝试单独修复空白字符再试一次
-                    try:
-                        chart_data = json.loads(chart_data.replace('\xa0', ' ').replace('\\n', ' '))
-                    except json.JSONDecodeError:
-                        yield self.create_text_message("图表数据不是有效的 JSON 格式")
-                        return
+                chart_data = self._parse_chart_data_text(chart_data)
+            except Exception:
+                yield self.create_text_message("图表数据不是有效的 JSON 格式")
+                return
 
         try:
             df = pd.DataFrame(chart_data)
@@ -227,36 +409,65 @@ class Json2chartTool(Tool):
             except Exception as e:
                 # 当大模型配置无效时，尝试使用auto_detect_keys作为后备方案
                 yield self.create_text_message(f"大模型配置验证失败: {str(e)}")
-                # 导入auto_detect_keys函数
-                from utils.chart import auto_detect_keys
                 try:
                     yield self.create_text_message("正在尝试使用自动检测字段作为后备方案...")
-                    # 自动检测合适的字段
-                    detected_name_key, detected_value_keys = auto_detect_keys(data_list)
-                    
-                    # 根据检测到的字段自动选择图表类型
-                    if chart_type is None:
-                        if len(detected_value_keys) >= 3:
-                            chart_type = "雷达图"
-                        elif len(detected_value_keys) == 2:
-                            chart_type = "散点图"
-                        else:
+                    recovered_with_llm_alias = False
+                    if isinstance(value_keys, list) and value_keys:
+                        converted_data, converted = self._convert_single_row_wide_table(
+                            data_list,
+                            value_keys=value_keys,
+                            series_names=series_names if isinstance(series_names, list) else None,
+                        )
+                        if converted:
+                            data_list = converted_data
+                            name_key = "category"
+                            value_keys = ["value"]
+                            series_names = ["数值"]
+                            group_key = None
+                            df = pd.DataFrame(data_list)
+                            recovered_with_llm_alias = True
+                            yield self.create_text_message("检测到单行宽表，已优先保留大模型命名并完成转换")
+
+                    if recovered_with_llm_alias:
+                        if chart_type is None:
                             chart_type = "柱状图"
-                    
-                    # 设置默认的series_names
-                    detected_series_names = detected_value_keys
-                    
-                    yield self.create_text_message(f"自动检测结果: 图表类型={chart_type}, 类别字段={detected_name_key}, 数值字段={detected_value_keys}")
-                    
-                    # 使用检测到的字段继续处理
-                    name_key = detected_name_key
-                    value_keys = detected_value_keys
-                    series_names = detected_series_names
-                    group_key = None  # 自动检测模式下暂不支持group_key
-                    
-                    # 重新设置图表标题（如果未指定）
-                    if chart_title is None:
-                        chart_title = f"{name_key} 数据分析图表"
+                        if chart_title is None:
+                            chart_title = f"{name_key} 数据分析图表"
+                        yield self.create_text_message(f"回退成功: 图表类型={chart_type}, 类别字段={name_key}, 数值字段={value_keys}")
+                    else:
+                    # 单行宽表优先转为 category/value，避免名称字段缺失导致回退失败
+                        data_list, wide_table_converted = self._convert_single_row_wide_table(data_list)
+                        if wide_table_converted:
+                            yield self.create_text_message("检测到单行宽表，已自动转换为 category/value 结构")
+                        # 自动检测合适的字段
+                        detected_name_key, detected_value_keys = self._auto_detect_keys_with_numeric_string(data_list)
+                        
+                        # 根据检测到的字段自动选择图表类型
+                        if chart_type is None:
+                            if wide_table_converted:
+                                chart_type = "柱状图"
+                            elif len(detected_value_keys) >= 3:
+                                chart_type = "雷达图"
+                            elif len(detected_value_keys) == 2:
+                                chart_type = "散点图"
+                            else:
+                                chart_type = "柱状图"
+                        
+                        # 设置默认的series_names
+                        detected_series_names = detected_value_keys
+                        
+                        yield self.create_text_message(f"自动检测结果: 图表类型={chart_type}, 类别字段={detected_name_key}, 数值字段={detected_value_keys}")
+                        
+                        # 使用检测到的字段继续处理
+                        name_key = detected_name_key
+                        value_keys = detected_value_keys
+                        series_names = detected_series_names
+                        group_key = None  # 自动检测模式下暂不支持group_key
+                        df = pd.DataFrame(data_list)
+                        
+                        # 重新设置图表标题（如果未指定）
+                        if chart_title is None:
+                            chart_title = f"{name_key} 数据分析图表"
                 except Exception as fallback_error:
                     yield self.create_text_message(f"自动检测字段也失败: {str(fallback_error)}")
                     return
@@ -289,22 +500,13 @@ class Json2chartTool(Tool):
                 # 此时应该转置数据，将列名作为name_key，列值作为value_key
                 if chart_type in ["饼状图", "环形图"] and len(data_list) == 1 and len(value_keys) > 1:
                     yield self.create_text_message(f"检测到单行多列数据，正在为{chart_type}进行自动转置处理...")
-                    transposed_data = []
-                    row = data_list[0]
-                    for i, key in enumerate(value_keys):
-                        # 尝试使用series_names作为类别名（如果有）
-                        category_name = series_names[i] if i < len(series_names) else key
-                        # 尝试转换数值
-                        try:
-                            val = float(row[key])
-                            transposed_data.append({
-                                "category": category_name,
-                                "value": val
-                            })
-                        except (ValueError, TypeError):
-                            continue
+                    transposed_data, converted = self._convert_single_row_wide_table(
+                        data_list,
+                        value_keys=value_keys,
+                        series_names=series_names,
+                    )
                     
-                    if transposed_data:
+                    if converted:
                         # 更新上下文变量
                         data_list = transposed_data
                         name_key = "category"
@@ -324,6 +526,8 @@ class Json2chartTool(Tool):
                             raise ValueError(f"字段 {value_key} 无法转换为数值类型")
                     except Exception as e:
                         raise ValueError(f"字段 {value_key} 不是有效的数值类型: {str(e)}")
+
+                data_list = df.to_dict(orient='records')
                 
                 # 根据图表类型生成 ECharts 配置
                 supported_chart_types = ["饼状图", "柱状图", "折线图", "雷达图", "漏斗图", "散点图", "环形图", "双轴图", "堆叠柱状图"]
@@ -351,6 +555,7 @@ class Json2chartTool(Tool):
                 elif chart_type == "散点图":
                     echarts_config = generate_echarts_scatter(data_list, name_key=name_key, title=chart_title, value_keys=value_keys, series_names=series_names, saturation=saturation, brightness=brightness, group_key=group_key)
 
+                echarts_config = self._apply_value_unit(echarts_config, value_unit)
                 yield self.create_text_message(f"\n```echarts\n{echarts_config}\n```")
 
             except Exception as e:

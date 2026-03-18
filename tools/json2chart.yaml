@@ -82,6 +82,18 @@ parameters:
     min: 0
     max: 1
     default: 0.95
+  - name: value_unit
+    type: string
+    required: false
+    label:
+      en_US: value_unit
+      zh_Hans: 数值单位
+    human_description:
+      en_US: Please input value unit, default is ten-thousand yuan
+      zh_Hans: 请输入数值单位，默认万元，可选元、万元、亿元
+    llm_description: value_unit, support 元, 万元, 亿元
+    form: form
+    default: 万元
   - name: model
     type: model-selector
     scope: llm
