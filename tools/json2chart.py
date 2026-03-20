@@ -230,9 +230,8 @@ class Json2chartTool(Tool):
         if isinstance(chart_data, str):
             try:
                 chart_data = self._parse_chart_data_text(chart_data)
-            except Exception:
-                yield self.create_text_message("图表数据不是有效的 JSON 格式")
-                return
+            except Exception as e:
+                raise ValueError("图表数据不是有效的 JSON 格式") from e
 
         try:
             df = pd.DataFrame(chart_data)
@@ -315,8 +314,7 @@ class Json2chartTool(Tool):
                     stream=False
                 )
             except Exception as e:
-                yield self.create_text_message(f"调用大模型生成配置失败: {str(e)}")
-                return
+                raise RuntimeError(f"调用大模型生成配置失败: {str(e)}") from e
 
             # 提取大模型返回的 JSON 数据
             try:
@@ -400,17 +398,13 @@ class Json2chartTool(Tool):
 
                 for value_key in value_keys:
                     if value_key not in df.columns:
-                        yield self.create_text_message(f"value_key {value_key} 不存在于 DataFrame 中")
-                        return
+                        raise ValueError(f"value_key {value_key} 不存在于 DataFrame 中")
 
             except json.JSONDecodeError:
-                yield self.create_text_message(f"大模型返回的内容不是有效的 JSON 格式")
-                return
+                raise ValueError("大模型返回的内容不是有效的 JSON 格式")
             except Exception as e:
                 # 当大模型配置无效时，尝试使用auto_detect_keys作为后备方案
-                yield self.create_text_message(f"大模型配置验证失败: {str(e)}")
                 try:
-                    yield self.create_text_message("正在尝试使用自动检测字段作为后备方案...")
                     recovered_with_llm_alias = False
                     if isinstance(value_keys, list) and value_keys:
                         converted_data, converted = self._convert_single_row_wide_table(
@@ -426,19 +420,15 @@ class Json2chartTool(Tool):
                             group_key = None
                             df = pd.DataFrame(data_list)
                             recovered_with_llm_alias = True
-                            yield self.create_text_message("检测到单行宽表，已优先保留大模型命名并完成转换")
 
                     if recovered_with_llm_alias:
                         if chart_type is None:
                             chart_type = "柱状图"
                         if chart_title is None:
                             chart_title = f"{name_key} 数据分析图表"
-                        yield self.create_text_message(f"回退成功: 图表类型={chart_type}, 类别字段={name_key}, 数值字段={value_keys}")
                     else:
                     # 单行宽表优先转为 category/value，避免名称字段缺失导致回退失败
                         data_list, wide_table_converted = self._convert_single_row_wide_table(data_list)
-                        if wide_table_converted:
-                            yield self.create_text_message("检测到单行宽表，已自动转换为 category/value 结构")
                         # 自动检测合适的字段
                         detected_name_key, detected_value_keys = self._auto_detect_keys_with_numeric_string(data_list)
                         
@@ -455,9 +445,7 @@ class Json2chartTool(Tool):
                         
                         # 设置默认的series_names
                         detected_series_names = detected_value_keys
-                        
-                        yield self.create_text_message(f"自动检测结果: 图表类型={chart_type}, 类别字段={detected_name_key}, 数值字段={detected_value_keys}")
-                        
+
                         # 使用检测到的字段继续处理
                         name_key = detected_name_key
                         value_keys = detected_value_keys
@@ -469,8 +457,7 @@ class Json2chartTool(Tool):
                         if chart_title is None:
                             chart_title = f"{name_key} 数据分析图表"
                 except Exception as fallback_error:
-                    yield self.create_text_message(f"自动检测字段也失败: {str(fallback_error)}")
-                    return
+                    raise ValueError(f"自动检测字段也失败: {str(fallback_error)}") from fallback_error
 
             # 根据图表类型验证配置参数
             try:
@@ -483,7 +470,6 @@ class Json2chartTool(Tool):
                             df[name_key] = pd.to_numeric(df[name_key], errors='coerce')
                             if not df[name_key].isna().all():
                                 # 如果name_key是数值字段，将其也加入value_keys
-                                yield self.create_text_message(f"检测到name_key '{name_key}' 是数值字段，已自动将其作为第二个数值轴")
                                 value_keys = [name_key] + value_keys
                                 series_names = [name_key] + series_names
                         except:
@@ -499,7 +485,6 @@ class Json2chartTool(Tool):
                 # 当饼图/环形图只有一行数据，但有多个数值列时，很可能是宽表结构（列名即类别）
                 # 此时应该转置数据，将列名作为name_key，列值作为value_key
                 if chart_type in ["饼状图", "环形图"] and len(data_list) == 1 and len(value_keys) > 1:
-                    yield self.create_text_message(f"检测到单行多列数据，正在为{chart_type}进行自动转置处理...")
                     transposed_data, converted = self._convert_single_row_wide_table(
                         data_list,
                         value_keys=value_keys,
@@ -514,7 +499,6 @@ class Json2chartTool(Tool):
                         series_names = ["数值"]
                         # 更新 df，确保后续验证逻辑能找到新的字段
                         df = pd.DataFrame(data_list)
-                        yield self.create_text_message(f"数据转置完成，生成 {len(data_list)} 个数据项")
 
                 # 验证字段是否为数值类型
                 for value_key in value_keys:
@@ -532,8 +516,7 @@ class Json2chartTool(Tool):
                 # 根据图表类型生成 ECharts 配置
                 supported_chart_types = ["饼状图", "柱状图", "折线图", "雷达图", "漏斗图", "散点图", "环形图", "双轴图", "堆叠柱状图"]
                 if chart_type not in supported_chart_types:
-                    yield self.create_text_message(f"不支持的图表类型: {chart_type}")
-                    return
+                    raise ValueError(f"不支持的图表类型: {chart_type}")
 
                 if chart_type == "饼状图":
                     echarts_config = generate_echarts_pie(data_list, name_key=name_key, title=chart_title, value_keys=value_keys, series_names=series_names, saturation=saturation, brightness=brightness)
@@ -558,7 +541,7 @@ class Json2chartTool(Tool):
                 echarts_config = self._apply_value_unit(echarts_config, value_unit)
                 yield self.create_text_message(f"\n```echarts\n{echarts_config}\n```")
 
-            except Exception as e:
-                yield self.create_text_message(f"生成失败！错误信息: {str(e)}")
-        except Exception as e:
-            yield self.create_text_message(f"生成失败！错误信息: {str(e)}")
+            except Exception:
+                raise
+        except Exception:
+            raise
