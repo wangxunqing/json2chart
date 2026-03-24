@@ -1,5 +1,5 @@
 from utils.chart import get_colors, auto_detect_keys
-from utils.theme import get_theme_global, VALUE_AXIS, CATEGORY_AXIS, BAR_ITEM_STYLE
+from utils.theme import get_theme_global, VALUE_AXIS, CATEGORY_AXIS, GRID_STYLE, BAR_ITEM_STYLE
 import json
 
 def generate_echarts_stacked_bar(
@@ -47,12 +47,7 @@ def generate_echarts_stacked_bar(
             **global_theme["tooltip"],
         },
         "legend": {**global_theme["legend"], "data": series_names},
-        "grid": {
-            "left": "3%",
-            "right": "4%",
-            "bottom": "3%",
-            "containLabel": True
-        },
+        "grid": GRID_STYLE,
         "xAxis": {
             "type": "category",
             "data": [item[name_key] for item in data_list],

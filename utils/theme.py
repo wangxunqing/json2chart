@@ -33,8 +33,8 @@ LEGEND_TEXT_STYLE = {"color": "#242424", "fontSize": 12}
 # 坐标轴：类目轴
 CATEGORY_AXIS = {
     "axisLine": {"show": True, "lineStyle": {"color": "#dcdcdc"}},
-    "axisTick": {"show": True, "lineStyle": {"color": "#dcdcdc"}},
-    "axisLabel": {"show": True, "color": "#5e5e5e"},
+    "axisTick": {"show": True, "lineStyle": {"color": "#dcdcdc"}, "alignWithLabel": True},
+    "axisLabel": {"show": True, "color": "#5e5e5e", "rotate": 45, "interval": 0},
     "splitLine": {"show": False, "lineStyle": {"color": ["#E0E6F1"]}},
 }
 
@@ -48,6 +48,14 @@ VALUE_AXIS = {
 
 # 分割线（图表内网格）- 与 valueAxis 一致，供 bar/line 等统一使用
 SPLIT_LINE_STYLE = {"show": True, "lineStyle": {"color": ["#e0e0e0"], "type": "dashed"}}
+
+# 网格样式，防止坐标轴标签被截断
+GRID_STYLE = {
+    "left": "5%",
+    "right": "5%",
+    "bottom": "15%",
+    "containLabel": True
+}
 
 # 提示框
 TOOLTIP_AXIS_POINTER = {

@@ -193,10 +193,14 @@ class Json2chartTool(Tool):
                 axis_label["formatter"] = f"{{value}}{value_unit}"
                 y_axis["axisLabel"] = axis_label
         elif isinstance(y_axis, list):
-            for axis in y_axis:
+            for i, axis in enumerate(y_axis):
                 if not isinstance(axis, dict):
                     continue
-                axis_name = axis.get("name")
+                axis_name = axis.get("name", "")
+                # Skip scaling for rate axis (usually right axis or contains rate/率)
+                if "率" in axis_name or "rate" in axis_name.lower():
+                    continue
+                
                 axis["name"] = f"{axis_name}{value_unit}" if axis_name else value_unit
                 axis_label = axis.get("axisLabel", {})
                 if isinstance(axis_label, dict):
@@ -208,6 +212,11 @@ class Json2chartTool(Tool):
             for series in series_list:
                 if not isinstance(series, dict):
                     continue
+                series_name = series.get("name", "")
+                # Skip scaling if the series is a rate
+                if "率" in series_name or "rate" in series_name.lower() or series_name == "比率":
+                    continue
+                
                 if "data" in series:
                     series["data"] = self._scale_series_data(series["data"], factor)
                 series_tooltip = series.get("tooltip")
@@ -481,6 +490,44 @@ class Json2chartTool(Tool):
                 elif chart_type == "雷达图" and len(value_keys) < 3:
                     raise ValueError("雷达图需要至少三个数值字段进行多维度分析")
 
+                # 特殊处理：双轴图且为单行宽表数据自动转置
+                if chart_type == "双轴图" and len(data_list) == 1 and bar_value_keys and line_value_keys:
+                    if len(bar_value_keys) == len(line_value_keys):
+                        transposed = []
+                        # series_names length should match the number of pairs
+                        # but in the prompt we ask LLM to output series_names corresponding to value_keys
+                        # For dual axis, value_keys usually has length = len(bar) + len(line)
+                        # or LLM just outputs series_names for the categories. We will try our best:
+                        cat_names = series_names[:len(bar_value_keys)] if len(series_names) >= len(bar_value_keys) else bar_value_keys
+                        for i in range(len(bar_value_keys)):
+                            b_key = bar_value_keys[i]
+                            l_key = line_value_keys[i]
+                            if b_key in data_list[0] and l_key in data_list[0]:
+                                b_val = self._parse_numeric_value(data_list[0].get(b_key))
+                                l_val = self._parse_numeric_value(data_list[0].get(l_key))
+                                if b_val is not None and l_val is not None:
+                                    transposed.append({
+                                        "category": cat_names[i],
+                                        "bar_value": b_val,
+                                        "line_value": l_val
+                                    })
+                        if transposed:
+                            # Try to infer metric names
+                            b_name = "柱状指标"
+                            l_name = "折线指标"
+                            if "amt" in bar_value_keys[0].lower() or "额" in bar_value_keys[0]:
+                                b_name = "金额"
+                            if "rate" in line_value_keys[0].lower() or "率" in line_value_keys[0]:
+                                l_name = "比率"
+                            
+                            data_list = transposed
+                            name_key = "category"
+                            bar_value_keys = ["bar_value"]
+                            line_value_keys = ["line_value"]
+                            value_keys = ["bar_value", "line_value"]
+                            series_names = [b_name, l_name]
+                            df = pd.DataFrame(data_list)
+
                 # 特殊处理：单行宽表数据自动转置
                 # 当饼图/环形图只有一行数据，但有多个数值列时，很可能是宽表结构（列名即类别）
                 # 此时应该转置数据，将列名作为name_key，列值作为value_key
@@ -529,8 +576,10 @@ class Json2chartTool(Tool):
                 elif chart_type == "折线图":
                     echarts_config = generate_echarts_line(data_list, name_key=name_key, title=chart_title, value_keys=value_keys, series_names=series_names, saturation=saturation, brightness=brightness, group_key=group_key)
                 elif chart_type == "双轴图":
+                    bar_names = series_names[:len(bar_value_keys)] if len(series_names) >= len(bar_value_keys) else bar_value_keys
+                    line_names = series_names[len(bar_value_keys):len(bar_value_keys)+len(line_value_keys)] if len(series_names) >= len(bar_value_keys) + len(line_value_keys) else line_value_keys
                     # 直接调用，参数已经在前面处理好了
-                    echarts_config = generate_echarts_dual_axis(data_list, name_key=name_key, title=chart_title, bar_value_keys=bar_value_keys, line_value_keys=line_value_keys, saturation=saturation, brightness=brightness)
+                    echarts_config = generate_echarts_dual_axis(data_list, name_key=name_key, title=chart_title, bar_value_keys=bar_value_keys, line_value_keys=line_value_keys, bar_names=bar_names, line_names=line_names, saturation=saturation, brightness=brightness)
                 elif chart_type == "雷达图":
                     echarts_config = generate_echarts_radar(data_list, name_key=name_key, title=chart_title, value_keys=value_keys, series_names=series_names, saturation=saturation, brightness=brightness, group_key=group_key)
                 elif chart_type == "漏斗图":

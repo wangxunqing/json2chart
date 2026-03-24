@@ -1,5 +1,5 @@
 from utils.chart import get_colors, auto_detect_keys
-from utils.theme import get_theme_global, VALUE_AXIS, CATEGORY_AXIS
+from utils.theme import get_theme_global, VALUE_AXIS, CATEGORY_AXIS, GRID_STYLE
 import json
 
 def generate_echarts_dual_axis(
@@ -75,12 +75,7 @@ def generate_echarts_dual_axis(
             "top": "top", # 图例置顶
             "right": "right" # 图例靠右
         },
-        "grid": {
-            "left": "3%",
-            "right": "4%",
-            "bottom": "3%",
-            "containLabel": True
-        },
+        "grid": GRID_STYLE,
         "xAxis": {
             "type": "category",
             "data": x_axis_data,
@@ -91,7 +86,7 @@ def generate_echarts_dual_axis(
             # 左轴：柱状图
             {
                 "type": "value",
-                "name": "柱状图数据", # 可根据实际情况传入参数设置名称
+                "name": "金额" if any("amt" in k.lower() or "额" in k for k in bar_value_keys + bar_names) else "柱状图数据", # 可根据实际情况传入参数设置名称
                 "position": "left",
                 "axisLine": {"show": True, "lineStyle": {"color": "#5470C6"}}, # 蓝色
                 "axisLabel": {"formatter": "{value}"},
@@ -101,7 +96,7 @@ def generate_echarts_dual_axis(
             # 右轴：折线图
             {
                 "type": "value",
-                "name": "折线图数据",
+                "name": "比率" if any("rate" in k.lower() or "率" in k for k in line_value_keys + line_names) else "折线图数据",
                 "position": "right",
                 "axisLine": {"show": True, "lineStyle": {"color": "#91CC75"}}, # 绿色
                 "axisLabel": {"formatter": "{value}"}, # 如果是百分比，可以使用 "{value}%"

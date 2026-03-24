@@ -1,5 +1,5 @@
 from utils.chart import get_colors, auto_detect_keys
-from utils.theme import get_theme_global, VALUE_AXIS, SPLIT_LINE_STYLE
+from utils.theme import get_theme_global, VALUE_AXIS, SPLIT_LINE_STYLE, GRID_STYLE
 import json
 
 def generate_echarts_scatter(
@@ -59,6 +59,7 @@ def generate_echarts_scatter(
         "title": {"text": title, "left": "center", "textStyle": global_theme["title"]["textStyle"]},
         "tooltip": {**global_theme["tooltip"]},
         "legend": global_theme["legend"],
+        "grid": GRID_STYLE,
         "xAxis": {
             "type": "value",
             "name": value_keys[0],

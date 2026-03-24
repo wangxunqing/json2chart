@@ -4,7 +4,7 @@ from utils.theme import (
     VALUE_AXIS,
     CATEGORY_AXIS,
     BAR_ITEM_STYLE,
-    SPLIT_LINE_STYLE,
+    SPLIT_LINE_STYLE, GRID_STYLE,
 )
 import json
 
@@ -54,6 +54,7 @@ def generate_echarts_bar(
             **global_theme["tooltip"],
         },
         "legend": {**global_theme["legend"]},
+        "grid": GRID_STYLE,
         "series": [],
     }
     
@@ -72,7 +73,7 @@ def generate_echarts_bar(
             "data": x_axis_data,
             **CATEGORY_AXIS,
             "axisTick": {"alignWithLabel": True, **CATEGORY_AXIS.get("axisTick", {})},
-            "axisLabel": {"rotate": 45, "interval": 0, **CATEGORY_AXIS.get("axisLabel", {})},
+            "axisLabel": CATEGORY_AXIS.get("axisLabel", {}),
         }
         # 为y轴配置（主题样式）
         config["yAxis"] = {"type": "value", **VALUE_AXIS}
@@ -152,7 +153,7 @@ def generate_echarts_bar(
             "data": x_axis_data,
             **CATEGORY_AXIS,
             "axisTick": {"alignWithLabel": True, **CATEGORY_AXIS.get("axisTick", {})},
-            "axisLabel": {"rotate": 45, "interval": 0, **CATEGORY_AXIS.get("axisLabel", {})},
+            "axisLabel": CATEGORY_AXIS.get("axisLabel", {}),
         }
         # 为y轴配置（主题样式）
         config["yAxis"] = {"type": "value", **VALUE_AXIS}

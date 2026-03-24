@@ -1,5 +1,5 @@
 from utils.chart import get_colors, auto_detect_keys
-from utils.theme import get_theme_global, VALUE_AXIS, CATEGORY_AXIS, SPLIT_LINE_STYLE
+from utils.theme import get_theme_global, VALUE_AXIS, CATEGORY_AXIS, SPLIT_LINE_STYLE, GRID_STYLE
 import json
 
 def generate_echarts_line(
@@ -48,6 +48,7 @@ def generate_echarts_line(
             **global_theme["tooltip"],
         },
         "legend": {**global_theme["legend"], "bottom": "10%"},
+        "grid": GRID_STYLE,
         "series": [],
     }
     
