@@ -142,6 +142,14 @@ class Json2chartTool(Tool):
             return data_list, False
         return transposed_data, True
 
+    def _should_convert_single_row_wide_table(self, chart_type: str | None, data_list: list[dict[str, Any]], value_keys: list[str] | None) -> bool:
+        supported_chart_types = {"饼状图", "环形图", "柱状图", "折线图", "雷达图", "漏斗图", "堆叠柱状图"}
+        return (
+            chart_type in supported_chart_types
+            and len(data_list) == 1
+            and len(value_keys or []) > 1
+        )
+
     def _scale_series_data(self, data: Any, factor: float) -> Any:
         if isinstance(data, list):
             scaled = []
@@ -531,7 +539,7 @@ class Json2chartTool(Tool):
                 # 特殊处理：单行宽表数据自动转置
                 # 当饼图/环形图只有一行数据，但有多个数值列时，很可能是宽表结构（列名即类别）
                 # 此时应该转置数据，将列名作为name_key，列值作为value_key
-                if chart_type in ["饼状图", "环形图"] and len(data_list) == 1 and len(value_keys) > 1:
+                if self._should_convert_single_row_wide_table(chart_type, data_list, value_keys):
                     transposed_data, converted = self._convert_single_row_wide_table(
                         data_list,
                         value_keys=value_keys,
