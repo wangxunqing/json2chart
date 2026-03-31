@@ -23,6 +23,11 @@ from dify_plugin.entities.model.message import SystemPromptMessage, UserPromptMe
 import pandas as pd
 
 class Json2chartTool(Tool):
+    _PERCENT_HINTS = ("%", "百分比", "占比", "比率", "率", "rate", "ratio", "pct", "percent")
+    _FORMATTER_TOKENS = ("{c}", "{c0}", "{c1}", "{c2}", "{c[0]}", "{c[1]}", "{c[2]}")
+    _SINGLE_ROW_WIDE_TABLE_CHART_TYPES = {"饼状图", "环形图", "柱状图", "折线图", "雷达图", "漏斗图", "堆叠柱状图"}
+    _SUPPORTED_CHART_TYPES = ("饼状图", "柱状图", "折线图", "雷达图", "漏斗图", "散点图", "环形图", "双轴图", "堆叠柱状图")
+
     def _parse_chart_data_text(self, chart_data_text: str) -> Any:
         candidates = []
         raw = (chart_data_text or "").strip()
@@ -143,9 +148,8 @@ class Json2chartTool(Tool):
         return transposed_data, True
 
     def _should_convert_single_row_wide_table(self, chart_type: str | None, data_list: list[dict[str, Any]], value_keys: list[str] | None) -> bool:
-        supported_chart_types = {"饼状图", "环形图", "柱状图", "折线图", "雷达图", "漏斗图", "堆叠柱状图"}
         return (
-            chart_type in supported_chart_types
+            chart_type in self._SINGLE_ROW_WIDE_TABLE_CHART_TYPES
             and len(data_list) == 1
             and len(value_keys or []) > 1
         )
@@ -174,12 +178,69 @@ class Json2chartTool(Tool):
             return scaled
         return data
 
+    def _contains_percent_hint(self, text: Any) -> bool:
+        if not isinstance(text, str):
+            return False
+        normalized = text.strip().lower()
+        return any(hint in normalized for hint in self._PERCENT_HINTS)
+
+    def _is_percent_series(self, series: dict[str, Any], axis_name: str = "") -> bool:
+        if not isinstance(series, dict):
+            return False
+        if self._contains_percent_hint(series.get("name", "")):
+            return True
+        if self._contains_percent_hint(axis_name):
+            return True
+        return False
+
+    def _normalize_percent_value(self, value: Any) -> Any:
+        if isinstance(value, bool):
+            return value
+        numeric_value = self._parse_numeric_value(value)
+        if numeric_value is None:
+            return value
+        if 0 <= numeric_value <= 1:
+            return round(numeric_value * 100, 6)
+        return round(numeric_value, 6)
+
+    def _normalize_percent_series_data(self, data: Any) -> Any:
+        if isinstance(data, list):
+            normalized = []
+            for item in data:
+                if isinstance(item, dict):
+                    new_item = dict(item)
+                    if "value" in new_item:
+                        if isinstance(new_item["value"], list):
+                            new_item["value"] = [self._normalize_percent_value(v) for v in new_item["value"]]
+                        else:
+                            new_item["value"] = self._normalize_percent_value(new_item["value"])
+                    normalized.append(new_item)
+                elif isinstance(item, list):
+                    if len(item) >= 2:
+                        new_point = list(item)
+                        new_point[1] = self._normalize_percent_value(new_point[1])
+                        normalized.append(new_point)
+                    else:
+                        normalized.append(item)
+                else:
+                    normalized.append(self._normalize_percent_value(item))
+            return normalized
+        return data
+
     def _add_unit_to_formatter(self, formatter: Any, value_unit: str) -> Any:
         if not isinstance(formatter, str) or not value_unit:
             return formatter
         updated = formatter
-        for token in ["{c}", "{c0}", "{c1}", "{c2}", "{c[0]}", "{c[1]}", "{c[2]}"]:
+        for token in self._FORMATTER_TOKENS:
             updated = updated.replace(token, f"{token}{value_unit}")
+        return updated
+
+    def _add_percent_to_formatter(self, formatter: Any) -> Any:
+        if not isinstance(formatter, str):
+            return formatter
+        updated = formatter
+        for token in self._FORMATTER_TOKENS:
+            updated = re.sub(rf"{re.escape(token)}(?!\s*%)", f"{token}%", updated)
         return updated
 
     def _apply_value_unit(self, echarts_config: str, value_unit: str) -> str:
@@ -189,47 +250,96 @@ class Json2chartTool(Tool):
         except Exception:
             return echarts_config
 
-        tooltip = config.get("tooltip")
-        if isinstance(tooltip, dict) and "formatter" in tooltip:
-            tooltip["formatter"] = self._add_unit_to_formatter(tooltip.get("formatter"), value_unit)
-
         y_axis = config.get("yAxis")
-        if isinstance(y_axis, dict):
-            y_axis["name"] = value_unit
-            axis_label = y_axis.get("axisLabel", {})
-            if isinstance(axis_label, dict):
-                axis_label["formatter"] = f"{{value}}{value_unit}"
-                y_axis["axisLabel"] = axis_label
-        elif isinstance(y_axis, list):
-            for i, axis in enumerate(y_axis):
-                if not isinstance(axis, dict):
-                    continue
-                axis_name = axis.get("name", "")
-                # Skip scaling for rate axis (usually right axis or contains rate/率)
-                if "率" in axis_name or "rate" in axis_name.lower():
-                    continue
-                
-                axis["name"] = f"{axis_name}{value_unit}" if axis_name else value_unit
-                axis_label = axis.get("axisLabel", {})
-                if isinstance(axis_label, dict):
-                    axis_label["formatter"] = f"{{value}}{value_unit}"
-                    axis["axisLabel"] = axis_label
-
         series_list = config.get("series")
+        axis_names_by_index: dict[int, str] = {}
+        if isinstance(y_axis, dict):
+            axis_names_by_index[0] = y_axis.get("name", "")
+        elif isinstance(y_axis, list):
+            for index, axis in enumerate(y_axis):
+                if isinstance(axis, dict):
+                    axis_names_by_index[index] = axis.get("name", "")
+
+        axis_has_percent: dict[int, bool] = {}
+        axis_has_amount: dict[int, bool] = {}
+        any_percent_series = False
+        any_amount_series = False
+
         if isinstance(series_list, list):
             for series in series_list:
                 if not isinstance(series, dict):
                     continue
-                series_name = series.get("name", "")
-                # Skip scaling if the series is a rate
-                if "率" in series_name or "rate" in series_name.lower() or series_name == "比率":
-                    continue
-                
-                if "data" in series:
-                    series["data"] = self._scale_series_data(series["data"], factor)
+                axis_index = series.get("yAxisIndex", 0)
+                if not isinstance(axis_index, int):
+                    axis_index = 0
+                axis_name = axis_names_by_index.get(axis_index, "")
+                is_percent = self._is_percent_series(series, axis_name=axis_name)
+                axis_has_percent[axis_index] = axis_has_percent.get(axis_index, False) or is_percent
+                axis_has_amount[axis_index] = axis_has_amount.get(axis_index, False) or (not is_percent)
+                any_percent_series = any_percent_series or is_percent
+                any_amount_series = any_amount_series or (not is_percent)
+
                 series_tooltip = series.get("tooltip")
                 if isinstance(series_tooltip, dict) and "formatter" in series_tooltip:
-                    series_tooltip["formatter"] = self._add_unit_to_formatter(series_tooltip.get("formatter"), value_unit)
+                    if is_percent:
+                        series_tooltip["formatter"] = self._add_percent_to_formatter(series_tooltip.get("formatter"))
+                    else:
+                        series_tooltip["formatter"] = self._add_unit_to_formatter(series_tooltip.get("formatter"), value_unit)
+
+                if "data" in series:
+                    if is_percent:
+                        series["data"] = self._normalize_percent_series_data(series["data"])
+                    else:
+                        series["data"] = self._scale_series_data(series["data"], factor)
+
+        if isinstance(y_axis, dict):
+            has_percent = axis_has_percent.get(0, False)
+            has_amount = axis_has_amount.get(0, False)
+            axis_label = y_axis.get("axisLabel", {})
+            if not isinstance(axis_label, dict):
+                axis_label = {}
+            if has_percent and not has_amount:
+                y_axis["name"] = "%"
+                axis_label["formatter"] = "{value}%"
+            elif has_amount and not has_percent:
+                y_axis["name"] = value_unit
+                axis_label["formatter"] = f"{{value}}{value_unit}"
+            elif has_percent and has_amount:
+                axis_label["formatter"] = "{value}"
+            y_axis["axisLabel"] = axis_label
+        elif isinstance(y_axis, list):
+            for i, axis in enumerate(y_axis):
+                if not isinstance(axis, dict):
+                    continue
+                has_percent = axis_has_percent.get(i, False)
+                has_amount = axis_has_amount.get(i, False)
+                axis_name = axis.get("name", "")
+                axis_label = axis.get("axisLabel", {})
+                if not isinstance(axis_label, dict):
+                    axis_label = {}
+
+                if has_percent and not has_amount:
+                    axis["name"] = axis_name if self._contains_percent_hint(axis_name) else "%"
+                    axis_label["formatter"] = "{value}%"
+                elif has_amount and not has_percent:
+                    if self._contains_percent_hint(axis_name):
+                        continue
+                    axis["name"] = f"{axis_name}{value_unit}" if axis_name else value_unit
+                    axis_label["formatter"] = f"{{value}}{value_unit}"
+                elif has_percent and has_amount:
+                    axis_label["formatter"] = "{value}"
+                else:
+                    if not self._contains_percent_hint(axis_name):
+                        axis["name"] = f"{axis_name}{value_unit}" if axis_name else value_unit
+                        axis_label["formatter"] = f"{{value}}{value_unit}"
+                axis["axisLabel"] = axis_label
+
+        tooltip = config.get("tooltip")
+        if isinstance(tooltip, dict) and "formatter" in tooltip:
+            if any_percent_series and not any_amount_series:
+                tooltip["formatter"] = self._add_percent_to_formatter(tooltip.get("formatter"))
+            elif any_amount_series and not any_percent_series:
+                tooltip["formatter"] = self._add_unit_to_formatter(tooltip.get("formatter"), value_unit)
 
         return json.dumps(config, indent=4, ensure_ascii=False)
     
@@ -261,10 +371,7 @@ class Json2chartTool(Tool):
                 # 如果包含不可哈希的类型（如列表），则跳过去重
                 unique_df = df
             
-            if len(unique_df) > 20:
-                sample_df = unique_df.head(20)
-            else:
-                sample_df = unique_df
+            sample_df = unique_df.head(20)
             # 转换为类似 Markdown 格式，设置 index=False 避免输出索引列
             sample_data = sample_df.to_csv(sep='|', na_rep='nan', index=False)
             sample_markdown = '|' + sample_data.replace('\n', '\n|')
@@ -419,7 +526,7 @@ class Json2chartTool(Tool):
 
             except json.JSONDecodeError:
                 raise ValueError("大模型返回的内容不是有效的 JSON 格式")
-            except Exception as e:
+            except Exception:
                 # 当大模型配置无效时，尝试使用auto_detect_keys作为后备方案
                 try:
                     recovered_with_llm_alias = False
@@ -569,8 +676,7 @@ class Json2chartTool(Tool):
                 data_list = df.to_dict(orient='records')
                 
                 # 根据图表类型生成 ECharts 配置
-                supported_chart_types = ["饼状图", "柱状图", "折线图", "雷达图", "漏斗图", "散点图", "环形图", "双轴图", "堆叠柱状图"]
-                if chart_type not in supported_chart_types:
+                if chart_type not in self._SUPPORTED_CHART_TYPES:
                     raise ValueError(f"不支持的图表类型: {chart_type}")
 
                 if chart_type == "饼状图":
@@ -597,8 +703,8 @@ class Json2chartTool(Tool):
 
                 echarts_config = self._apply_value_unit(echarts_config, value_unit)
                 yield self.create_text_message(f"\n```echarts\n{echarts_config}\n```")
-
             except Exception:
                 raise
         except Exception:
             raise
+
