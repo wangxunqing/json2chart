@@ -1,6 +1,6 @@
 identity:
   author: lfenghx
-  name: Chart_Generation
+  name: chartgeneration
   label:
     en_US: Chart_Generation
     zh_Hans: AI图表生成
