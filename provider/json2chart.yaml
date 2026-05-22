@@ -1,9 +1,9 @@
 identity:
   author: lfenghx
-  name: json2chart
+  name: Chart_Generation
   label:
-    en_US: json2chart
-    zh_Hans: AI智能图表生成神器
+    en_US: Chart_Generation
+    zh_Hans: AI图表生成
   description:
     en_US: A plugin that converts JSON to charts with large models and ECharts
     zh_Hans: 一个利用大模型+Echart把JSON转成图表的插件
